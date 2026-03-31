@@ -1,0 +1,31 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+*.egg-info/
+dist/
+build/
+
+# Claude Code
+.claude/
+
+# Large outputs (keep structure but exclude big files)
+outputs/results/*.pkl
+outputs/results/*.csv
+outputs/figures/dir1_node_importance_maps/*.png
+outputs/figures/dir2_edge_importance_maps/*.png
+outputs/figures/dir1_node_score_distribution/*.png
+outputs/run_log.txt
+
+# IDE
+.vscode/
+.idea/
+
+# Logs
+*.log
+
+# Environment
+.env
+*.env
