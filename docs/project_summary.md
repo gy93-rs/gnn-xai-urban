@@ -8,15 +8,71 @@
 
 ## 已完成工作
 
-### 方向一：节点级归因分析（GradCAM）
+### 方向一：节点级归因分析
+
+支持 5 种可解释性方法：
+
+#### 1. GradCAM（梯度加权类激活映射）
 
 | 内容 | 说明 |
 |------|------|
-| 方法 | GradCAM（梯度加权类激活映射） |
 | 算法原理 | 输入特征梯度 L2 范数：`importance_v = ||∂score_y/∂x_v||₂`，归一化到 [0,1] |
 | 输入 | 10,095个图样本，17类UST |
 | 输出 | 每个节点的重要性分数（归一化到[0,1]） |
-| 可视化 | 热力矩阵图 + 51张节点重要性地图 + 箱线图 |
+| 特点 | 快速、批量处理、无需训练 |
+| 运行命令 | `python run_dir1.py --method gradcam` |
+
+#### 2. GNNExplainer
+
+| 内容 | 说明 |
+|------|------|
+| 算法原理 | 学习节点特征掩码和边掩码，优化目标 = 预测损失 + 稀疏性约束 |
+| 输入 | 逐图处理 |
+| 输出 | 节点特征重要性 + 边重要性 |
+| 特点 | PyG 1.6.3 内置，同时输出边归因 |
+| 运行命令 | `python run_dir1.py --method gnnexplainer --epochs 200` |
+
+#### 3. PGExplainer
+
+| 内容 | 说明 |
+|------|------|
+| 算法原理 | 参数化 MLP 网络，输入边特征（拼接两端节点嵌入），输出边重要性 |
+| 输入 | 需要在整个数据集上训练解释器 |
+| 输出 | 节点重要性 + 边重要性 |
+| 特点 | 批量处理、效率高、支持新样本泛化 |
+| 运行命令 | `python run_dir1.py --method pgexplainer --epochs 100` |
+
+#### 4. GraphMASK
+
+| 内容 | 说明 |
+|------|------|
+| 算法原理 | 强化学习选择边掩码，奖励 = 预测准确率 - λ×掩码边数 |
+| 输入 | 需要训练策略网络 |
+| 输出 | 节点重要性 + 边重要性 |
+| 特点 | 稀疏解释、可控制解释复杂度 |
+| 运行命令 | `python run_dir1.py --method graphmask --epochs 50` |
+
+#### 5. GraphLIME
+
+| 内容 | 说明 |
+|------|------|
+| 算法原理 | LIME 局部拟合：扰动节点特征，用 Ridge 回归拟合预测，系数作为重要性 |
+| 输入 | 扰动样本数（默认5000） |
+| 输出 | 节点重要性 + 特征重要性 |
+| 特点 | 模型无关、线性可解释 |
+| 运行命令 | `python run_dir1.py --method graphlime --samples 5000` |
+
+---
+
+### 方法对比
+
+| 方法 | 速度 | 边归因 | 特征归因 | 需要训练 | 适用场景 |
+|------|------|--------|----------|----------|----------|
+| GradCAM | ⚡ 最快 | ❌ | ❌ | ❌ | 快速分析 |
+| GNNExplainer | 🐢 慢 | ✅ | ✅ | 每图优化 | 精细解释 |
+| PGExplainer | 🚀 中等 | ✅ | ❌ | ✅ 一次性 | 大规模分析 |
+| GraphMASK | 🚀 中等 | ✅ | ❌ | ✅ 一次性 | 稀疏解释 |
+| GraphLIME | 🐢 慢 | ❌ | ✅ | ❌ | 特征分析 |
 
 **核心发现**：不同UST类别对各节点类型的依赖程度不同，建筑类节点在高密度城区样本中重要性更高。
 
@@ -40,18 +96,22 @@
 
 ```
 code/
-├── xai_config.py              # 配置文件（路径、类别名称、颜色）
-├── run_dir1.py                # 方向一入口脚本
-├── run_dir2.py                # 方向二入口脚本
+├── xai_config.py                    # 配置文件（路径、类别名称、颜色、超参数）
+├── run_dir1.py                      # 方向一入口脚本（支持5种方法）
+├── run_dir2.py                      # 方向二入口脚本
 ├── analysis/
-│   ├── node_attribution.py    # GradCAM节点归因
-│   └── edge_attribution.py    # 边归因分析
+│   ├── node_attribution.py          # GradCAM节点归因
+│   ├── gnnexplainer_attribution.py  # GNNExplainer实现
+│   ├── pgexplainer_attribution.py   # PGExplainer实现
+│   ├── graphmask_attribution.py     # GraphMASK实现
+│   ├── graphlime_attribution.py     # GraphLIME实现
+│   └── edge_attribution.py          # 边归因分析
 ├── visualization/
-│   ├── node_viz.py            # 节点可视化（热力图、地图）
-│   └── edge_viz.py            # 边可视化（热力矩阵、网络图）
+│   ├── node_viz.py                  # 节点可视化（热力图、地图）
+│   └── edge_viz.py                  # 边可视化（热力矩阵、网络图）
 └── outputs/
-    ├── results/               # CSV和PKL结果文件
-    └── figures/               # 可视化图片
+    ├── results/                     # CSV和PKL结果文件
+    └── figures/                     # 可视化图片
 ```
 
 ---
@@ -148,14 +208,23 @@ data.node_cat = torch.tensor(raw_col3, dtype=torch.long)
 ```
 outputs/
 ├── results/
-│   ├── node_importance_scores.pkl    # 节点分数（方向一核心输出）
-│   ├── dir1_summary_stats.csv        # 节点统计汇总
-│   ├── dir2_edge_type_matrix.csv     # 边类型矩阵（方向二核心输出）
-│   └── dir2_top_edge_types.csv       # Top-K边类型
+│   ├── node_importance_scores_gradcam.pkl      # GradCAM 节点分数
+│   ├── node_importance_scores_gnnexplainer.pkl # GNNExplainer 节点分数
+│   ├── node_importance_scores_pgexplainer.pkl  # PGExplainer 节点分数
+│   ├── node_importance_scores_graphmask.pkl    # GraphMASK 节点分数
+│   ├── node_importance_scores_graphlime.pkl    # GraphLIME 节点分数
+│   ├── dir1_summary_stats_<method>.csv         # 节点统计汇总
+│   ├── dir2_edge_type_matrix.csv               # 边类型矩阵（方向二核心输出）
+│   └── dir2_top_edge_types.csv                 # Top-K边类型
 └── figures/
-    ├── node_category_ust_heatmap.png           # 节点类别×UST热力矩阵
-    ├── dir1_node_importance_maps/              # 节点重要性地图（51张）
-    ├── dir1_node_score_distribution/           # 箱线图
+    ├── node_category_ust_heatmap_<method>.png  # 节点类别×UST热力矩阵
+    ├── dir1_node_importance_maps/              # 节点重要性地图（按方法分子目录）
+    │   ├── gradcam/
+    │   ├── gnnexplainer/
+    │   ├── pgexplainer/
+    │   ├── graphmask/
+    │   └── graphlime/
+    ├── dir1_node_score_distribution/           # 箱线图（按方法分子目录）
     ├── dir2_edge_type_heatmap.png              # 边类型×UST热力矩阵
     └── dir2_edge_importance_maps/              # 边重要性网络图（17张）
 ```
@@ -167,18 +236,37 @@ outputs/
 ### 运行方向一（节点归因）
 
 ```bash
-python run_dir1.py
+# GradCAM（默认，最快）
+python run_dir1.py --method gradcam
+
+# GNNExplainer（精细解释，同时输出边归因）
+python run_dir1.py --method gnnexplainer --epochs 200
+
+# PGExplainer（批量处理，效率高）
+python run_dir1.py --method pgexplainer --epochs 100
+
+# GraphMASK（稀疏解释）
+python run_dir1.py --method graphmask --epochs 50 --lambda_sparsity 0.1
+
+# GraphLIME（特征分析）
+python run_dir1.py --method graphlime --samples 5000 --alpha 1.0
 ```
 
 ### 运行方向二（边归因）
 
 ```bash
-python run_dir2.py --node_scores outputs/results/node_importance_scores.pkl
+python run_dir2.py --node_scores outputs/results/node_importance_scores_gradcam.pkl
 ```
 
 ### 可选参数
 
-方向二支持以下参数：
+方向一通用参数：
+- `--device`: 计算设备（默认`cuda`）
+- `--viz_only`: 仅生成可视化，跳过计算
+- `--viz_per_ust`: 每类UST可视化样本数（默认3）
+- `--seed`: 随机种子（默认42）
+
+方向二参数：
 - `--aggregation`: 边重要性聚合方式（默认`mean`，可选`max`、`product`）
 - `--seed`: 随机种子（默认42）
 

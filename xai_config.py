@@ -56,10 +56,30 @@ OUTPUT_CONFIG = {
 
 # ── 可解释性超参数 ────────────────────────────────────────
 XAI_CONFIG = {
+    # GradCAM
     "gradcam_layer": "last",  # 使用最后一层GNN嵌入做GradCAM
     "batch_size": 32,         # GradCAM批量推断，OOM时自动降为1
+
+    # GNNExplainer (PyG 1.6.3 内置)
     "gnnexplainer_epochs": 200,
     "gnnexplainer_lr": 0.01,
+
+    # PGExplainer (自己实现)
+    "pgexplainer_epochs": 100,
+    "pgexplainer_hidden": 64,
+    "pgexplainer_lr": 0.005,
+    "pgexplainer_temp": 1.0,  # Gumbel-Softmax 温度
+
+    # GraphMASK (自己实现)
+    "graphmask_epochs": 50,
+    "graphmask_lr": 0.01,
+    "graphmask_lambda": 0.1,  # 掩码惩罚系数
+
+    # GraphLIME (自己实现)
+    "graphlime_samples": 5000,
+    "graphlime_alpha": 1.0,  # Ridge 正则化系数
+
+    # 通用参数
     "sample_per_ust": 5,      # GNNExplainer每类UST抽样数
     "viz_sample_per_ust": 3,  # 可视化每类UST抽样数（方向一）
     "random_seed": 42,
