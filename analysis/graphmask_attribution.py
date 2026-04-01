@@ -42,12 +42,12 @@ class GraphMASKPolicy(nn.Module):
     输入边特征，输出边掩码概率（伯努利分布参数）。
     """
 
-    def __init__(self, hidden_dim: int = 64):
+    def __init__(self, emb_dim: int = 18, hidden_dim: int = 64):
         super().__init__()
 
-        # 边评分网络
+        # 边评分网络（emb_dim 是节点嵌入实际维度）
         self.edge_encoder = nn.Sequential(
-            nn.Linear(hidden_dim * 2, hidden_dim),
+            nn.Linear(emb_dim * 2, hidden_dim),
             nn.ReLU(),
             nn.Linear(hidden_dim, 1)
         )
@@ -108,14 +108,16 @@ class GraphMASKExplainer:
         self.device = device
         self.lambda_sparsity = lambda_sparsity
 
-        # 从模型配置获取隐藏维度
+        # 从模型配置获取嵌入维度和隐藏维度
+        emb_dim = config.MODEL_CONFIG.get("emb_dim", 18)
         if hidden_dim is None:
-            hidden_dim = config.MODEL_CONFIG.get("emb_dim", 18)
+            hidden_dim = config.XAI_CONFIG.get("graphmask_hidden", 64)
 
         self.hidden_dim = hidden_dim
+        self.emb_dim = emb_dim
 
-        # 策略网络
-        self.policy = GraphMASKPolicy(hidden_dim=hidden_dim).to(device)
+        # 策略网络（emb_dim 是节点嵌入实际维度，hidden_dim 是 MLP 内部维度）
+        self.policy = GraphMASKPolicy(emb_dim=emb_dim, hidden_dim=hidden_dim).to(device)
         self.optimizer = torch.optim.Adam(self.policy.parameters(), lr=lr)
 
     def get_node_embeddings(self, data: Data) -> torch.Tensor:

@@ -21,9 +21,17 @@ MOLCLR_ROOT = "/media/gy/ssd/shanghai_exp/MolCLR-Urban_alldata1127_512_cls"
 # ── 原始数据路径（只读，不修改）────────────────────────
 DATA_CONFIG = {
     "npz_dir": "/media/gy/ssd/shanghai_exp/data_prepare/graph_dataset_0225_32_512",
-    "tif_dir": "/media/gy/ssd/shanghai_exp/data_prepare/0225_512/shanghai",
+    "tif_dir": "/media/gy/ssd/shanghai_exp/data_prepare/0225_512/shanghai",  # 语义分割图
+    "jpg_dir": "/media/gy/DCA5-16F8/聚类结果/处理好的-二次筛选",  # 原始遥感图（按UST类别组织）
     "label_csv": "/media/gy/DCA5-16F8/聚类结果/image_labels.csv",
     "lst_tif": "/media/gy/ssd/UST与物理功能的相关性探索/src_data/lst.tif",
+}
+
+# ── 可视化阈值设置 ───────────────────────────────────────
+VIZ_CONFIG = {
+    "node_score_threshold": 0.5,    # 节点重要性阈值，低于此值不显示
+    "edge_score_threshold": 0.3,    # 边重要性阈值
+    "show_low_importance_nodes": False,  # 是否显示低重要性节点（灰色淡化）
 }
 
 # ── 模型权重路径 ─────────────────────────────────────────
@@ -65,19 +73,21 @@ XAI_CONFIG = {
     "gnnexplainer_lr": 0.01,
 
     # PGExplainer (自己实现)
-    "pgexplainer_epochs": 100,
+    "pgexplainer_epochs": 30,  # 减少到30轮（配合早停）
     "pgexplainer_hidden": 64,
     "pgexplainer_lr": 0.005,
     "pgexplainer_temp": 1.0,  # Gumbel-Softmax 温度
+    "pgexplainer_train_ratio": 0.2,  # 只用20%数据训练解释器
 
     # GraphMASK (自己实现)
     "graphmask_epochs": 50,
     "graphmask_lr": 0.01,
     "graphmask_lambda": 0.1,  # 掩码惩罚系数
 
-    # GraphLIME (自己实现)
-    "graphlime_samples": 5000,
-    "graphlime_alpha": 1.0,  # Ridge 正则化系数
+    # GraphLIME (自己实现，批量优化版)
+    "graphlime_samples": 1000,     # 扰动样本数（从5000降到1000，精度基本不变）
+    "graphlime_batch_size": 100,   # 批量推理大小（越大越快，但显存占用更高）
+    "graphlime_alpha": 1.0,        # Ridge 正则化系数
 
     # 通用参数
     "sample_per_ust": 5,      # GNNExplainer每类UST抽样数
@@ -105,6 +115,33 @@ UST_NAMES = {
     15: "绿地",
     16: "水体",
 }
+
+# ── UST类别ID到原始遥感图文件夹名映射 ────────────────────────────
+# 用于从UST标签找到对应的jpg文件夹
+UST_TO_JPG_FOLDER = {
+    0: "不透水面",
+    1: "高密度中层水平more_0.3",
+    2: "高密度中层左倾斜more_0.3",
+    3: "高密度中层右倾斜more_0.3",
+    4: "低密度高层less_0.2",
+    5: "低密度中层",  # 可能不存在，需要检查
+    6: "大型中低层",
+    7: "高密度低层more_0.3",
+    8: "中密度高层more_0.15",
+    9: "高密度中层",  # 可能不存在，需要检查
+    10: "城中村（高密度低层）",  # 可能需要映射到"高密度低层more_0.3"
+    11: "中密度低层别墅区",
+    12: "农村",
+    13: "运动场",
+    14: "低密度低层",  # 可能不存在
+    15: "绿地",
+    16: "4水体",
+}
+
+# JPG文件命名前缀（从ShanghaiSrc_XX_YY.jpg 转换为 shanghai_XX_YY）
+JPG_FILENAME_PREFIX = "ShanghaiSrc_"
+TIF_FILENAME_PREFIX = "shanghai_"
+NPZ_FILENAME_PREFIX = "shanghai_"
 
 # ── 节点语义类别（col3 值对应，原始数据0-9）────────────────────────────
 # 注意：数据集加载器one_hot编码有bug，直接读取原始col3

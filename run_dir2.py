@@ -193,12 +193,21 @@ def run_edge_analysis(args):
 
             # 添加 node_cat 属性
             if not hasattr(data, 'node_cat'):
-                data.node_cat = (data.x[:, 3] - 1).long()
+                # 从原始 NPZ 文件读取节点类别
+                npz_path = os.path.join(config.DATA_CONFIG["npz_dir"], filename)
+                raw_data = np.load(npz_path)
+                raw_col3 = raw_data['array1'][:, 3].astype(np.int64)
+                data.node_cat = torch.tensor(raw_col3, dtype=torch.long)
 
             output_path = os.path.join(
                 config.OUTPUT_CONFIG["edge_maps"],
                 f"UST{ust_label}_{sample_key}_network.png"
             )
+
+            # 获取阈值参数
+            edge_threshold = args.edge_threshold
+            if edge_threshold is None:
+                edge_threshold = config.VIZ_CONFIG.get("edge_score_threshold", 0.3)
 
             plot_edge_importance_network(
                 graph_key=sample_key,
@@ -207,7 +216,7 @@ def run_edge_analysis(args):
                 edge_types=edge_results[sample_key]['edge_types'],
                 output_path=output_path,
                 ust_label=ust_label,
-                top_k_edges=50  # 仅显示最重要的 50 条边
+                edge_threshold=edge_threshold
             )
             generated_networks += 1
 
@@ -241,6 +250,8 @@ def main():
     parser.add_argument('--aggregation', type=str, default='mean',
                         choices=['mean', 'max', 'product'],
                         help='边重要性聚合方式')
+    parser.add_argument('--edge_threshold', type=float, default=None,
+                        help='边重要性阈值，低于此值不显示（默认从config读取）')
     parser.add_argument('--seed', type=int, default=42)
 
     args = parser.parse_args()

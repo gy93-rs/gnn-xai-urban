@@ -187,7 +187,7 @@ def run_graphmask_analysis(args, dataset, model, device):
 
 
 def run_graphlime_analysis(args, dataset, model, device):
-    """运行 GraphLIME 节点归因分析"""
+    """运行 GraphLIME 节点归因分析（批量优化版）"""
     from analysis.graphlime_attribution import compute_graphlime_batch
 
     scores_path = os.path.join(
@@ -200,14 +200,15 @@ def run_graphlime_analysis(args, dataset, model, device):
         with open(scores_path, 'rb') as f:
             results = pickle.load(f)
     else:
-        logger.info("计算 GraphLIME 节点重要性分数...")
+        logger.info(f"计算 GraphLIME 节点重要性分数（批量优化版，samples={args.samples}）...")
         results = compute_graphlime_batch(
             dataset, model,
             num_samples=args.samples,
             alpha=args.alpha,
             device=device,
             save_path=scores_path,
-            npz_dir=config.DATA_CONFIG["npz_dir"]
+            npz_dir=config.DATA_CONFIG["npz_dir"],
+            batch_size=args.graphlime_batch_size
         )
 
     return results, scores_path
@@ -327,15 +328,24 @@ def run_analysis(args):
                     f"UST{ust_label}_{graph_key}.png"
                 )
 
-                plot_node_importance_map(
+                # 获取阈值参数
+                score_threshold = args.score_threshold
+                if score_threshold is None:
+                    score_threshold = config.VIZ_CONFIG.get("node_score_threshold", 0.5)
+
+                # 生成可视化（支持双底图模式）
+                generated_paths = plot_node_importance_map(
                     graph_key=graph_key,
                     node_scores=results[graph_key]['node_scores'],
                     data=data,
                     tif_dir=config.DATA_CONFIG["tif_dir"],
                     output_path=output_path,
-                    ust_label=ust_label
+                    ust_label=ust_label,
+                    score_threshold=score_threshold,
+                    jpg_dir=config.DATA_CONFIG.get("jpg_dir", ""),
+                    dual_mode=args.dual_mode
                 )
-                generated_maps += 1
+                generated_maps += len(generated_paths)
 
             except FileNotFoundError as e:
                 logger.warning(f"TIF 文件缺失: {graph_key}")
@@ -407,6 +417,14 @@ def main():
     parser.add_argument('--batch_size', type=int, default=32,
                         help='GradCAM 批量大小')
 
+    # 可视化参数
+    parser.add_argument('--score_threshold', type=float, default=None,
+                        help='节点重要性阈值，低于此值不显示（默认从config读取）')
+    parser.add_argument('--dual_mode', action='store_true', default=True,
+                        help='是否生成双底图版本（语义分割 + 原始遥感图）')
+    parser.add_argument('--no_dual_mode', action='store_false', dest='dual_mode',
+                        help='禁用双底图模式，只生成语义分割底图版本')
+
     # GNNExplainer / PGExplainer / GraphMASK 参数
     parser.add_argument('--epochs', type=int, default=None,
                         help='训练轮数 (方法默认值)')
@@ -420,10 +438,12 @@ def main():
                         help='GraphMASK 稀疏性惩罚系数')
 
     # GraphLIME 特有参数
-    parser.add_argument('--samples', type=int, default=5000,
-                        help='GraphLIME 扰动样本数')
+    parser.add_argument('--samples', type=int, default=None,
+                        help='GraphLIME 扰动样本数 (默认从config读取，推荐1000)')
     parser.add_argument('--alpha', type=float, default=1.0,
                         help='GraphLIME Ridge 正则化系数')
+    parser.add_argument('--graphlime_batch_size', type=int, default=100,
+                        help='GraphLIME 批量推理大小 (越大越快，但显存占用更高)')
 
     args = parser.parse_args()
 
@@ -447,6 +467,10 @@ def main():
             'graphlime': 0.0,
         }
         args.lr = default_lr[args.method]
+
+    # 设置 GraphLIME 默认参数
+    if args.samples is None:
+        args.samples = config.XAI_CONFIG.get('graphlime_samples', 1000)
 
     # 设置随机种子
     set_seed(args.seed)
